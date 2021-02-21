@@ -45,9 +45,67 @@ from PySide import QtGui, QtCore
 from FreeCAD import Gui
 import os
 import string
+import pickle
+
 App = FreeCAD
 Gui = FreeCADGui
+def log(msg):
+    if msg and msg[-1] != "\n":
+        msg="%s\n" % (msg)
+    FreeCAD.Console.PrintMessage(msg)
 
+
+class GuiDefaults:
+    skipAttrs=['skipAttrs', 'defaultsFile', 'save', 'loadOrCreate']
+    defaultsFile = os.path.expanduser("~/.Freecad_Alias_Manager")
+    def __init__(self):
+        self.mode = 'Set aliases'
+        self.column_from = 'B'
+        self.column_to = 'B'
+        self.row_from = 2
+        self.row_to = 4
+        
+        
+    def save(self):
+        file = None
+        try:
+            file = open(self.defaultsFile, 'wb')
+            pickle.dump(self.__getstate__(), file)
+        except Exception as e:
+            log("%s" % e)
+        finally:
+            if file:
+                file.close()
+
+    def __getstate__(self):
+        #log("%s" % (self.__dir__()))
+        state={}
+        for k in self.__dir__():
+            if k.startswith('_') or k in self.skipAttrs:
+                continue
+            state[k]=getattr(self, k)
+        return state
+ 
+    @classmethod
+    def loadOrCreate(cls):
+        defaults=GuiDefaults()
+        if os.path.exists(cls.defaultsFile):
+            file=None
+            try:
+                file = open(cls.defaultsFile, 'rb')
+                stateDict = pickle.load(file)
+                for k in stateDict:
+                    setattr(defaults, k, stateDict[k])
+            except Exception as e:
+                os.path.remove(cls.defaultsFile)
+                log("%s" % e)
+            finally:
+                if file:
+                    file.close()
+        return defaults
+
+if not('guiDefaults' in vars()) or guiDefaults is None:
+    guiDefaults = GuiDefaults.loadOrCreate()
 # ========================================================
 # ===== Info popup window ================================
 # ========================================================
@@ -92,6 +150,20 @@ class infoPopup(QtGui.QDialog):
 alphabet_list = list(string.ascii_uppercase)
 
 class p():
+
+    def getSelectedOrFirstSpreadSheet(self):
+        selectedObjects = FreeCADGui.Selection.getSelection()
+        for o in selectedObjects:
+            clazz=type(o)
+            if clazz.__module__ == 'Spreadsheet' and clazz.__name__ == 'Sheet':
+                return o
+        try:
+            firstSheet = App.ActiveDocument.Spreadsheet
+            return firstSheet
+        except AttributeError:
+            log("... no Spreadsheet found, aborting")
+        return None
+    
     def aliasManager(self):
         try:
 
@@ -101,16 +173,34 @@ class p():
             column_to = self.d3.currentText()
             row_from = self.d4.value()
             row_to = self.d5.value()
-
-
+            guiDefaults.mode = mode
+            guiDefaults.column_from = column_from
+            guiDefaults.column_to = column_to
+            guiDefaults.row_from = row_from
+            guiDefaults.row_to = row_to
+            guiDefaults.save()
+            
+            spreadSheet = self.getSelectedOrFirstSpreadSheet()
+            #spreadSheetLabel = self.dx.currentText()
+            #if spreadSheetLabel is None or len(spreadSheetLabel.strip()) == 0:
+            #    log("No spreadsheet available, exiting")
+            #    return
+            #spreadSheet = App.ActiveDocument.getObjectsByLabel(spreadSheetLabel)[0]
+            if not(spreadSheet):
+                return
 # ===== Mode - Set ==============================================
             if mode == "Set aliases":
-                for i in range(row_from,row_to+1):
+
+                for i in range(row_from, row_to+1):
                     cell_from = 'A' + str(i)
                     cell_to = str(column_from) + str(i)
-                    App.ActiveDocument.Spreadsheet.setAlias(cell_to, '')
-                    App.ActiveDocument.Spreadsheet.setAlias(cell_to, App.ActiveDocument.Spreadsheet.getContents(cell_from))
-                    App.ActiveDocument.recompute()
+                    newAlias = spreadSheet.getContents(cell_from)
+                    try:
+                        #log("Changing Alias on %s\n" % (cell_to))
+                        spreadSheet.setAlias(cell_to, newAlias)
+                    except:
+                        pass # ignore
+                App.ActiveDocument.recompute()
 
                 FreeCAD.Console.PrintMessage("\nAliases set\n")
 
@@ -120,7 +210,7 @@ class p():
                 for i in range(row_from,row_to+1):
                     cell_to = str(column_from) + str(i)
                     App.ActiveDocument.Spreadsheet.setAlias(cell_to, '')
-                    App.ActiveDocument.recompute()
+                App.ActiveDocument.recompute()
 
                 FreeCAD.Console.PrintMessage("\nAliases cleared\n")
 
@@ -133,10 +223,8 @@ class p():
                     cell_reference = 'A'+ str(i)                        
                     cell_from = column_from + str(i)
                     cell_to = column_to + str(i)
-                    App.ActiveDocument.Spreadsheet.setAlias(cell_from, '')
-                    App.ActiveDocument.recompute()
-                    App.ActiveDocument.Spreadsheet.setAlias(cell_to, App.ActiveDocument.Spreadsheet.getContents(cell_reference))
-                    App.ActiveDocument.recompute()
+                    spreadSheet.setAlias(cell_to, App.ActiveDocument.Spreadsheet.getContents(cell_reference))
+                App.ActiveDocument.recompute()
                 FreeCAD.Console.PrintMessage("\nAliases moved\n")
 
 
@@ -164,9 +252,9 @@ class p():
                         cell_reference = 'A' + str(i)
                         cell_from = str(fam_range[index-1]) + str(i)
                         cell_to = str(fam_range[index]) + str(i)
-                        App.ActiveDocument.Spreadsheet.setAlias(cell_from, '')
+                        spreadSheet.setAlias(cell_from, '')
                         App.ActiveDocument.recompute()
-                        App.ActiveDocument.Spreadsheet.setAlias(cell_to, App.ActiveDocument.Spreadsheet.getContents(cell_reference))
+                        spreadSheet.setAlias(cell_to, App.ActiveDocument.Spreadsheet.getContents(cell_reference))
                         App.ActiveDocument.recompute()
                         sfx = str(fam_range[index]) + '1'
 
@@ -181,7 +269,7 @@ class p():
                 # Clear last aliases created:
                 for j in range(row_from,row_to+1):
                     cell_to = str(column_to) + str(j)
-                    App.ActiveDocument.Spreadsheet.setAlias(cell_to, '')
+                    spreadSheet.setAlias(cell_to, '')
                 App.ActiveDocument.recompute()
 
                 # Turn working file to original naming:
@@ -257,15 +345,21 @@ class p():
         self.dialog.resize(400,140)
         
         self.dialog.setWindowTitle("Alias manager")
- 
+        
+        iN2x = QtGui.QLabel("sheet:")
+        iN2x.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        self.dx = QtGui.QComboBox()
+        for obj in App.ActiveDocument.Objects:
+            if obj.TypeId == 'Spreadsheet::Sheet':
+                self.dx.addItem(obj.Label)
+
         iN1 = QtGui.QLabel("mode:")
         iN1.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         self.d1 = QtGui.QComboBox()
-        self.d1.addItem("Set aliases")
-        self.d1.addItem("Clear aliases")
-        self.d1.addItem("Move aliases")
-        self.d1.addItem("Generate part family")
-        self.d1.setCurrentIndex(0) # set default item
+        modeItems = ["Set aliases", "Clear aliases", "Move aliases", "Generate part family"]
+        for it in modeItems:
+            self.d1.addItem(it)
+        self.d1.setCurrentIndex(modeItems.index(guiDefaults.mode)) # set default item
         self.d1.currentIndexChanged['QString'].connect(disableWidget)
  
         iN2a = QtGui.QLabel("column:")
@@ -278,7 +372,7 @@ class p():
         for i in range(0,26):
             for j in range(0,26):
                 self.d2.addItem(alphabet_list[i] + alphabet_list[j])
-        self.d2.setCurrentIndex(1) # set default item
+        self.d2.setCurrentIndex(alphabet_list.index(guiDefaults.column_from)) # set default item
 
         iN3 = QtGui.QLabel("to")
         iN3.setAlignment(QtCore.Qt.AlignCenter | QtCore.Qt.AlignVCenter)
@@ -289,21 +383,21 @@ class p():
         for i in range(0,26):
             for j in range(0,26):
                 self.d3.addItem(alphabet_list[i] + alphabet_list[j])
-        self.d3.setCurrentIndex(2) # set default item
+        self.d3.setCurrentIndex(alphabet_list.index(guiDefaults.column_to)) # set default item
         self.d3.setEnabled(False) # set initial state to not editable
         self.d3.hide() # set initial state hidden
 
         iN4 = QtGui.QLabel("from row:")
         iN4.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         self.d4 = QtGui.QSpinBox()
-        self.d4.setValue(2.0) # set default item
+        self.d4.setValue(guiDefaults.row_from) # set default item
         self.d4.setSingleStep(1.0)
         self.d4.setMinimum(1.0)
 
         iN5 = QtGui.QLabel("to row:")
         iN5.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         self.d5 = QtGui.QSpinBox()
-        self.d5.setValue(4.0) # set default item
+        self.d5.setValue(guiDefaults.row_to) # set default item
         self.d5.setSingleStep(1.0)
         self.d5.setMinimum(1.0)
 
@@ -319,9 +413,11 @@ class p():
 
         grid = QtGui.QGridLayout()
         grid.setSpacing(10)
-
         # Mode
         grid.addWidget(self.d1, 0, 0, 1, 3)
+        # Sheet
+        #        grid.addWidget(iN2x,    2, 0, 1, 1)
+        #grid.addWidget(self.dx, 2, 1, 1, 1)
         # column, column from
         grid.addWidget(iN2a,    2, 0, 1, 1)
         grid.addWidget(iN2b,    1, 1, 1, 1)
@@ -359,4 +455,5 @@ class p():
     def popup(self):
         self.dialog2 = infoPopup()
         self.dialog2.exec_()
-p() 
+p()
+
