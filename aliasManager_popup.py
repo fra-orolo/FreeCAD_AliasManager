@@ -414,27 +414,34 @@ class p():
         grid = QtGui.QGridLayout()
         grid.setSpacing(10)
         # Mode
-        grid.addWidget(self.d1, 0, 0, 1, 3)
+        row = 0
+        grid.addWidget(self.d1, row, 0, 1, 3)
+        row+=1
         # Sheet
-        #        grid.addWidget(iN2x,    2, 0, 1, 1)
-        #grid.addWidget(self.dx, 2, 1, 1, 1)
+        grid.addWidget(iN2x, row, 0, 1, 1)
+        grid.addWidget(self.dx, row, 1, 1, 1)
+        row+=1
         # column, column from
-        grid.addWidget(iN2a,    2, 0, 1, 1)
-        grid.addWidget(iN2b,    1, 1, 1, 1)
-        grid.addWidget(self.d2, 2, 1, 1, 1)
+        grid.addWidget(iN2a, row, 0, 1, 1)
+        grid.addWidget(iN2b, row, 1, 1, 1)
+        grid.addWidget(iN3,  row, 2, 1, 1)
+        row+=1
+        grid.addWidget(self.d2, row, 1, 1, 1)
         # column to
-        grid.addWidget(iN3,     1, 2, 1, 1)
-        grid.addWidget(self.d3, 2, 2, 1, 1)
+        grid.addWidget(self.d3, row, 2, 1, 1)
+        row+=1
         # from row
-        grid.addWidget(iN4,     3, 0, 1, 1)
-        grid.addWidget(self.d4, 3, 1, 1, 1)
+        grid.addWidget(iN4,     row, 0, 1, 1)
+        grid.addWidget(self.d4, row, 1, 1, 1)
+        row+=1
         # to row
-        grid.addWidget(iN5,     4, 0, 1, 1)
-        grid.addWidget(self.d5, 4, 1)
+        grid.addWidget(iN5,     row, 0, 1, 1)
+        grid.addWidget(self.d5, row, 1)
+        row+=1
         # + info
-        grid.addWidget(self.d6, 6, 0, 1, 1)
+        grid.addWidget(self.d6, row, 0, 1, 1)
         # cancel, OK
-        grid.addWidget(okbox,   6, 1, 1, 2)
+        grid.addWidget(okbox,   row, 1, 1, 2)
 
         self.dialog.setLayout(grid)
 
